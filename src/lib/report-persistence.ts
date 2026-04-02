@@ -1,10 +1,23 @@
 import { mkdirSync } from "fs";
+import { createRequire } from "module";
 import { dirname, join } from "path";
-import { DatabaseSync } from "node:sqlite";
 
+import { getReportPersistenceMode } from "@/lib/env";
 import type { Report, ReportRequest } from "@/lib/types";
 
+const require = createRequire(import.meta.url);
 const storagePath = join(process.cwd(), "data", "report-jobs.sqlite");
+
+interface Statement {
+  all(): unknown[];
+  get(...params: unknown[]): unknown;
+  run(...params: unknown[]): void;
+}
+
+interface SqliteDatabase {
+  exec(sql: string): void;
+  prepare(sql: string): Statement;
+}
 
 export interface PersistedJob {
   id: string;
@@ -14,19 +27,30 @@ export interface PersistedJob {
   error?: string;
 }
 
+function persistenceMode() {
+  return getReportPersistenceMode();
+}
+
 function ensureStorageDir() {
   mkdirSync(dirname(storagePath), { recursive: true });
 }
 
-let database: DatabaseSync | null = null;
+let database: SqliteDatabase | null = null;
 
 function getDatabase() {
+  if (persistenceMode() !== "sqlite") {
+    return null;
+  }
+
   if (database) {
     return database;
   }
 
   ensureStorageDir();
-  database = new DatabaseSync(storagePath);
+  const sqliteModule = require("node:sqlite") as {
+    DatabaseSync: new (path: string) => SqliteDatabase;
+  };
+  database = new sqliteModule.DatabaseSync(storagePath);
   database.exec(`
     CREATE TABLE IF NOT EXISTS report_jobs (
       id TEXT PRIMARY KEY,
@@ -41,8 +65,12 @@ function getDatabase() {
 }
 
 export function loadPersistedJobs(): PersistedJob[] {
+  const db = getDatabase();
+  if (!db) {
+    return [];
+  }
+
   try {
-    const db = getDatabase();
     const rows = db.prepare(
       `SELECT id, created_at, request_json, report_json, error
        FROM report_jobs
@@ -72,8 +100,12 @@ export function listPersistedJobs(): PersistedJob[] {
 }
 
 export function getPersistedJobById(id: string): PersistedJob | null {
+  const db = getDatabase();
+  if (!db) {
+    return null;
+  }
+
   try {
-    const db = getDatabase();
     const row = db.prepare(
       `SELECT id, created_at, request_json, report_json, error
        FROM report_jobs
@@ -137,6 +169,10 @@ export function getPreviousCompletedReportBySubject(input: {
 
 export function savePersistedJobs(jobs: PersistedJob[]) {
   const db = getDatabase();
+  if (!db) {
+    return;
+  }
+
   const upsert = db.prepare(`
     INSERT INTO report_jobs (id, created_at, request_json, report_json, error)
     VALUES (?, ?, ?, ?, ?)

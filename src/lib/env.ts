@@ -9,6 +9,15 @@ function readInteger(name: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function readPersistenceMode() {
+  const value = process.env.REPORT_PERSISTENCE_MODE?.trim().toLowerCase();
+  if (value === "sqlite" || value === "memory") {
+    return value;
+  }
+
+  return "auto";
+}
+
 export const env = {
   companiesHouseApiKey: readOptional("COMPANIES_HOUSE_API_KEY"),
   openSanctionsApiKey: readOptional("OPENSANCTIONS_API_KEY"),
@@ -18,6 +27,7 @@ export const env = {
   appAccessKey: readOptional("APP_ACCESS_KEY"),
   rateLimitPostPerMinute: readInteger("APP_RATE_LIMIT_POST_PER_MINUTE", 12),
   rateLimitGetPerMinute: readInteger("APP_RATE_LIMIT_GET_PER_MINUTE", 90),
+  reportPersistenceMode: readPersistenceMode(),
 };
 
 export function hasCompaniesHouseConfig() {
@@ -38,4 +48,12 @@ export function hasOpenAiConfig() {
 
 export function hasAppAccessKey() {
   return Boolean(env.appAccessKey);
+}
+
+export function getReportPersistenceMode() {
+  if (env.reportPersistenceMode === "sqlite" || env.reportPersistenceMode === "memory") {
+    return env.reportPersistenceMode;
+  }
+
+  return process.env.VERCEL ? "memory" : "sqlite";
 }

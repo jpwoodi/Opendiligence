@@ -9,6 +9,7 @@ OpenDiligence is a prototype due diligence report generator inspired by the Xapi
 - live enrichment from ICIJ Offshore Leaks, GLEIF LEI data, and the FCA Warning List
 - SQLite-backed local persistence for jobs and finished reports
 - optional API protection and rate limiting for local/demo deployments
+- Vercel-safe stateless mode for production demos without a database
 
 ## Getting started
 
@@ -40,6 +41,7 @@ OPENSANCTIONS_API_KEY=your_key_here
 BRAVE_SEARCH_API_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
 APP_ACCESS_KEY=optional_demo_password
+REPORT_PERSISTENCE_MODE=auto
 ```
 
 ## Current architecture
@@ -71,7 +73,32 @@ APP_ACCESS_KEY=optional_demo_password
 - ICIJ Offshore Leaks, GLEIF, and FCA Warning List enrichments are public-source lookups and do not require additional API keys.
 - When `APP_ACCESS_KEY` is set, the UI and API expect that key on report creation and polling requests.
 - Reports now persist to `data/report-jobs.sqlite`, so completed jobs survive local restarts.
+- `REPORT_PERSISTENCE_MODE=auto` uses SQLite locally and automatically switches to stateless memory mode on Vercel.
+- In stateless mode, live report runs still work, but `/reports` history and cross-run comparisons are not retained across deployments or cold starts.
 - Individual/person reports use extra media filtering to drop unrelated common-name results where possible, but ambiguous names still benefit significantly from DOB and context input.
+
+## Vercel deployment
+
+This repo is now safe to deploy on Vercel without first migrating persistence to a hosted database.
+
+Recommended Vercel environment variables:
+
+```bash
+COMPANIES_HOUSE_API_KEY=...
+OPENSANCTIONS_API_KEY=...
+BRAVE_SEARCH_API_KEY=...
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4.1-mini
+APP_ACCESS_KEY=optional
+REPORT_PERSISTENCE_MODE=memory
+```
+
+Notes:
+
+- `REPORT_PERSISTENCE_MODE=memory` is the safest explicit setting for Vercel.
+- If you leave it as `auto`, the app will still choose memory mode automatically when `VERCEL` is present.
+- Memory mode is good for demos and evaluation, but not for durable report history.
+- For production persistence, the next step is moving job storage from local SQLite to a hosted database such as Vercel Postgres, Neon, or Supabase.
 
 ## Agent-first usage
 
