@@ -1,5 +1,3 @@
-import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
 import { createRequire } from "module";
 import OpenAI from "openai";
 
@@ -265,17 +263,6 @@ function fallbackTextFromHtml(html: string) {
   ).slice(0, MAX_EXTRACTED_CHARS);
 }
 
-function extractWithReadability(html: string, url: string) {
-  try {
-    const dom = new JSDOM(html, { url });
-    const article = new Readability(dom.window.document).parse();
-    const content = article?.textContent || dom.window.document.body?.textContent || "";
-    return normaliseWhitespace(content).slice(0, MAX_EXTRACTED_CHARS);
-  } catch {
-    return fallbackTextFromHtml(html);
-  }
-}
-
 function loadPdfParse() {
   return require("pdf-parse") as typeof import("pdf-parse");
 }
@@ -317,7 +304,7 @@ async function fetchExtractedText(url: string) {
 
     const html = await response.text();
     return {
-      text: extractWithReadability(html, url),
+      text: fallbackTextFromHtml(html),
       contentType,
     };
   } catch {
