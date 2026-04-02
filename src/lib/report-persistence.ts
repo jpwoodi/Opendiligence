@@ -1,11 +1,9 @@
 import { mkdirSync } from "fs";
-import { createRequire } from "module";
 import { dirname, join } from "path";
 
 import { getReportPersistenceMode } from "@/lib/env";
 import type { Report, ReportRequest } from "@/lib/types";
 
-const require = createRequire(import.meta.url);
 const storagePath = join(process.cwd(), "data", "report-jobs.sqlite");
 
 interface Statement {
@@ -37,6 +35,25 @@ function ensureStorageDir() {
 
 let database: SqliteDatabase | null = null;
 
+function loadSqliteModule() {
+  const builtinLoader = process.getBuiltinModule as
+    | ((name: string) => { DatabaseSync: new (path: string) => SqliteDatabase } | undefined)
+    | undefined;
+
+  if (builtinLoader) {
+    const builtin = builtinLoader("node:sqlite");
+    if (builtin) {
+      return builtin;
+    }
+  }
+
+  // Fallback for runtimes where the builtin loader is unavailable.
+  const nodeRequire = Function("return require")() as (
+    name: string,
+  ) => { DatabaseSync: new (path: string) => SqliteDatabase };
+  return nodeRequire("node:sqlite");
+}
+
 function getDatabase() {
   if (persistenceMode() !== "sqlite") {
     return null;
@@ -47,9 +64,7 @@ function getDatabase() {
   }
 
   ensureStorageDir();
-  const sqliteModule = require("node:sqlite") as {
-    DatabaseSync: new (path: string) => SqliteDatabase;
-  };
+  const sqliteModule = loadSqliteModule();
   database = new sqliteModule.DatabaseSync(storagePath);
   database.exec(`
     CREATE TABLE IF NOT EXISTS report_jobs (
