@@ -104,12 +104,14 @@ async function enrichHit(hit: WarningSearchHit) {
 export async function researchWithFcaWarnings(request: ReportRequest): Promise<{
   adverseMedia: MediaFinding[];
   sources: Source[];
+  unavailable?: boolean;
 }> {
   const html = await fetchHtml(`${SEARCH_URL}?search=${encodeURIComponent(request.subject_name)}`);
   if (!html) {
     return {
       adverseMedia: [],
       sources: [],
+      unavailable: true,
     };
   }
 
@@ -124,6 +126,7 @@ export async function researchWithFcaWarnings(request: ReportRequest): Promise<{
     return {
       adverseMedia: [],
       sources: [],
+      unavailable: false,
     };
   }
 
@@ -148,5 +151,6 @@ export async function researchWithFcaWarnings(request: ReportRequest): Promise<{
       type: "regulatory" as const,
       accessed_at: now,
     })),
+    unavailable: false,
   };
 }

@@ -910,6 +910,13 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
     ).catch(() => null),
   ]);
   const [icijData, gleifData, insolvencyData, fcaData] = enrichmentResults;
+  if (fcaData?.unavailable) {
+    recordDebug(id, {
+      scope: "fca_warning_list",
+      level: "warning",
+      message: "FCA Warning List was unavailable from the hosted runtime, so this source was skipped for the current run.",
+    });
+  }
   const ukCurrentRole =
     request.subject_type === "individual"
       ? await withTimeout(
@@ -1062,6 +1069,9 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
   }
   if (!insolvencyData) {
     warnings.push("Insolvency screening could not be completed from the live Gazette source.");
+  }
+  if (fcaData?.unavailable) {
+    warnings.push("FCA Warning List was temporarily unavailable from the hosted runtime and was skipped.");
   }
 
   if (request.subject_type === "individual" && hasCompaniesHouseConfig()) {
