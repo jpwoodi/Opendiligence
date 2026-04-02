@@ -5,27 +5,32 @@ import { createReportJob } from "@/lib/report-store";
 import type { ReportRequest } from "@/lib/types";
 
 export async function POST(request: Request) {
-  const guardResponse = guardApiRequest(request);
-  if (guardResponse) {
-    return guardResponse;
+  try {
+    const guardResponse = guardApiRequest(request);
+    if (guardResponse) {
+      return guardResponse;
+    }
+
+    const body = (await request.json()) as ReportRequest;
+
+    if (!body.subject_name?.trim()) {
+      return NextResponse.json(
+        { error: "subject_name is required" },
+        { status: 400 },
+      );
+    }
+
+    if (body.subject_type !== "individual" && body.subject_type !== "organisation") {
+      return NextResponse.json(
+        { error: "subject_type must be individual or organisation" },
+        { status: 400 },
+      );
+    }
+
+    const job = await createReportJob(body);
+    return NextResponse.json(job, { status: 202 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Report job creation failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const body = (await request.json()) as ReportRequest;
-
-  if (!body.subject_name?.trim()) {
-    return NextResponse.json(
-      { error: "subject_name is required" },
-      { status: 400 },
-    );
-  }
-
-  if (body.subject_type !== "individual" && body.subject_type !== "organisation") {
-    return NextResponse.json(
-      { error: "subject_type must be individual or organisation" },
-      { status: 400 },
-    );
-  }
-
-  const job = await createReportJob(body);
-  return NextResponse.json(job, { status: 202 });
 }

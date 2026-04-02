@@ -12,17 +12,11 @@ import {
   savePersistedJobs,
 } from "@/lib/report-persistence";
 import {
-  findingsFromEvidence,
-  researchWithBrave,
-} from "@/lib/providers/brave-search";
-import {
   fetchIndividualFromCompaniesHouse,
   fetchOrganisationFromCompaniesHouse,
 } from "@/lib/providers/companies-house";
-import { researchWithFcaWarnings } from "@/lib/providers/fca-warning-list";
 import { researchWithGleif } from "@/lib/providers/gleif";
 import { researchWithIcij } from "@/lib/providers/icij-offshore-leaks";
-import { researchWithInsolvencyGazette } from "@/lib/providers/insolvency-gazette";
 import {
   annotateMediaFindingsForIndividual,
   filterEvidenceForIndividual,
@@ -329,6 +323,34 @@ function dedupeMedia(items: Report["adverse_media"]) {
   }
 
   return deduped;
+}
+
+async function loadBraveSearchProvider() {
+  return import("@/lib/providers/brave-search");
+}
+
+async function researchWithBraveLazy(request: ReportRequest) {
+  const provider = await loadBraveSearchProvider();
+  return provider.researchWithBrave(request);
+}
+
+async function findingsFromEvidenceLazy(
+  evidence: Awaited<ReturnType<typeof researchWithBraveLazy>>["adverseEvidence"],
+  riskCategory: string,
+  severity: "low" | "medium" | "high",
+) {
+  const provider = await loadBraveSearchProvider();
+  return provider.findingsFromEvidence(evidence, riskCategory, severity);
+}
+
+async function researchWithFcaWarningsLazy(request: ReportRequest) {
+  const provider = await import("@/lib/providers/fca-warning-list");
+  return provider.researchWithFcaWarnings(request);
+}
+
+async function researchWithInsolvencyGazetteLazy(request: ReportRequest) {
+  const provider = await import("@/lib/providers/insolvency-gazette");
+  return provider.researchWithInsolvencyGazette(request);
 }
 
 function mergeMatchMetadataIntoSanctions(
@@ -881,10 +903,10 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
       withTimeout(researchWithGleif(request), 12000, "GLEIF enrichment"),
     ).catch(() => null),
     runProvider(id, "insolvency_register", () =>
-      withTimeout(researchWithInsolvencyGazette(request), 12000, "Insolvency Gazette screening"),
+      withTimeout(researchWithInsolvencyGazetteLazy(request), 12000, "Insolvency Gazette screening"),
     ).catch(() => null),
     runProvider(id, "fca_warning_list", () =>
-      withTimeout(researchWithFcaWarnings(request), 12000, "FCA warning list"),
+      withTimeout(researchWithFcaWarningsLazy(request), 12000, "FCA warning list"),
     ).catch(() => null),
   ]);
   const [icijData, gleifData, insolvencyData, fcaData] = enrichmentResults;
@@ -929,7 +951,7 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
   startStage(id, "web_search");
   const liveMedia = hasBraveSearchConfig()
     ? await runProvider(id, "brave_search", () =>
-        withTimeout(researchWithBrave(request), 45000, "Media research"),
+        withTimeout(researchWithBraveLazy(request), 45000, "Media research"),
       )
         .then((result) => {
           recordDebug(id, {
@@ -1091,7 +1113,7 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
         ? annotateMediaFindingsForIndividual({
             requestName: request.subject_name,
             canonicalName: individualData.subjectName,
-            findings: findingsFromEvidence(filteredAdverseEvidence, "adverse_media", "medium"),
+            findings: await findingsFromEvidenceLazy(filteredAdverseEvidence, "adverse_media", "medium"),
             evidence: filteredAdverseEvidence,
             referenceTerms,
           })
@@ -1100,7 +1122,7 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
         ? annotateMediaFindingsForIndividual({
             requestName: request.subject_name,
             canonicalName: individualData.subjectName,
-            findings: findingsFromEvidence(filteredPositiveEvidence, "positive_media", "low"),
+            findings: await findingsFromEvidenceLazy(filteredPositiveEvidence, "positive_media", "low"),
             evidence: filteredPositiveEvidence,
             referenceTerms,
           })
