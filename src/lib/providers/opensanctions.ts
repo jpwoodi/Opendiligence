@@ -201,6 +201,22 @@ function tokenise(value: string) {
   return normalise(value).split(" ").filter(Boolean);
 }
 
+function finalToken(value: string) {
+  const tokens = tokenise(value);
+  return tokens[tokens.length - 1];
+}
+
+function exactSurnameMatch(left: string, right: string) {
+  const leftSurname = finalToken(left);
+  const rightSurname = finalToken(right);
+
+  if (!leftSurname || !rightSurname) {
+    return false;
+  }
+
+  return leftSurname === rightSurname;
+}
+
 function parsePartialDateHint(value?: string) {
   if (!value) {
     return {};
@@ -294,17 +310,21 @@ function mapMatch(result: OpenSanctionsResult, request: ReportRequest): Sanction
   const score = typeof result.score === "number" ? result.score : 0;
   const datasets = pickDatasets(result);
   const primaryDataset = prettifyDatasetCode(datasets[0] || "OpenSanctions");
+  const hasExactSurname = request.subject_type !== "individual" || exactSurnameMatch(pickName(result), request.subject_name);
   const reason = buildMatchReason(result, request);
+  const effectiveScore = request.subject_type === "individual" && !hasExactSurname
+    ? Math.min(score, 0.74)
+    : score;
 
   return {
     entity_name: pickName(result),
     dataset: primaryDataset,
-    score,
-    status: score >= 0.95 ? "confirmed_match" : score >= 0.7 ? "potential_match" : "clear",
+    score: effectiveScore,
+    status: effectiveScore >= 0.95 ? "confirmed_match" : effectiveScore >= 0.7 ? "potential_match" : "clear",
     detail: describeMatch(result),
     office_summary: buildOfficeSummary(result),
-    match_reason: reason,
-    match_confidence: matchConfidence(score),
+    match_reason: hasExactSurname ? reason : `${reason}; surname mismatch`,
+    match_confidence: matchConfidence(effectiveScore),
   };
 }
 
@@ -361,6 +381,11 @@ export async function screenWithOpenSanctions(request: ReportRequest): Promise<{
       const requestTokens = tokenise(request.subject_name);
       const allNameTokensMatch =
         requestTokens.length > 0 && requestTokens.every((token) => nameTokens.includes(token));
+      const sameSurname = exactSurnameMatch(match.entity_name, request.subject_name);
+
+      if (!sameSurname) {
+        return false;
+      }
 
       if (!allNameTokensMatch && match.score < 0.85) {
         return false;
