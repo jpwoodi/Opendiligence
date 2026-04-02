@@ -9,7 +9,6 @@ import { withTimeout } from "@/lib/timeout";
 import type { AlternativeDataSummary, MediaFinding, ReportRequest, Source } from "@/lib/types";
 
 const require = createRequire(import.meta.url);
-const { PDFParse } = require("pdf-parse") as typeof import("pdf-parse");
 
 const BASE_URL = "https://api.search.brave.com/res/v1/web/search";
 const MAX_EXTRACTED_CHARS = 5000;
@@ -253,11 +252,32 @@ function toBuffer(input: ArrayBuffer) {
   return Buffer.from(input);
 }
 
+function fallbackTextFromHtml(html: string) {
+  return normaliseWhitespace(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, "\"")
+      .replace(/&#39;/gi, "'"),
+  ).slice(0, MAX_EXTRACTED_CHARS);
+}
+
 function extractWithReadability(html: string, url: string) {
-  const dom = new JSDOM(html, { url });
-  const article = new Readability(dom.window.document).parse();
-  const content = article?.textContent || dom.window.document.body?.textContent || "";
-  return normaliseWhitespace(content).slice(0, MAX_EXTRACTED_CHARS);
+  try {
+    const dom = new JSDOM(html, { url });
+    const article = new Readability(dom.window.document).parse();
+    const content = article?.textContent || dom.window.document.body?.textContent || "";
+    return normaliseWhitespace(content).slice(0, MAX_EXTRACTED_CHARS);
+  } catch {
+    return fallbackTextFromHtml(html);
+  }
+}
+
+function loadPdfParse() {
+  return require("pdf-parse") as typeof import("pdf-parse");
 }
 
 async function fetchExtractedText(url: string) {
@@ -277,6 +297,7 @@ async function fetchExtractedText(url: string) {
 
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/pdf") || url.toLowerCase().endsWith(".pdf")) {
+      const { PDFParse } = loadPdfParse();
       const parser = new PDFParse({ data: toBuffer(await response.arrayBuffer()) });
 
       try {

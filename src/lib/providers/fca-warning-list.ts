@@ -42,10 +42,17 @@ async function fetchHtml(url: string) {
   const response = await fetch(url, {
     headers: {
       "User-Agent": "OpenDiligenceBot/0.1 (+prototype due diligence research)",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-GB,en;q=0.9",
+      Referer: BASE_URL,
     },
     cache: "no-store",
     signal: AbortSignal.timeout(10000),
   });
+
+  if (response.status === 403) {
+    return null;
+  }
 
   if (!response.ok) {
     throw new Error(`FCA request failed (${response.status}) for ${url}`);
@@ -74,6 +81,10 @@ function extractMeta(html: string, name: string, property = false) {
 
 async function enrichHit(hit: WarningSearchHit) {
   const html = await fetchHtml(hit.url);
+  if (!html) {
+    return null;
+  }
+
   const description =
     extractMeta(html, "og:description", true) ||
     extractMeta(html, "description") ||
@@ -95,6 +106,13 @@ export async function researchWithFcaWarnings(request: ReportRequest): Promise<{
   sources: Source[];
 }> {
   const html = await fetchHtml(`${SEARCH_URL}?search=${encodeURIComponent(request.subject_name)}`);
+  if (!html) {
+    return {
+      adverseMedia: [],
+      sources: [],
+    };
+  }
+
   const hits = parseSearchHits(html)
     .map((hit) => ({ hit, score: scoreHit(hit.title, request) }))
     .filter((entry) => entry.score >= 20)

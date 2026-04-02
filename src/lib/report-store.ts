@@ -1069,7 +1069,7 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
       const individualData = await runProvider(id, "companies_house", () =>
         withTimeout(
           fetchIndividualFromCompaniesHouse(request),
-          12000,
+          22000,
           "Individual Companies House lookup",
         ),
       );
@@ -1421,7 +1421,11 @@ async function buildReport(id: string, request: ReportRequest): Promise<Report> 
 
   try {
     const companyData = await runProvider(id, "companies_house", () =>
-      fetchOrganisationFromCompaniesHouse(request),
+      withTimeout(
+        fetchOrganisationFromCompaniesHouse(request),
+        22000,
+        "Organisation Companies House lookup",
+      ),
     );
     const baseAssociations = companyData.pscs.slice(0, 2).map((psc) => ({
       subject: psc.name,

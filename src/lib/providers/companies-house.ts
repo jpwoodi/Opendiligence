@@ -139,7 +139,7 @@ async function companiesHouseFetch<T>(path: string) {
       Authorization: getAuthHeader(),
     },
     cache: "no-store",
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(18000),
   });
 
   if (!response.ok) {
