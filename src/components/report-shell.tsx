@@ -117,6 +117,76 @@ function buildPendingStatus(reportId: string): ReportStatusResponse {
   };
 }
 
+function normaliseReport(report: Report): Report {
+  return {
+    ...report,
+    warnings: report.warnings || [],
+    officers: report.officers || [],
+    pscs: report.pscs || [],
+    adverse_media: report.adverse_media || [],
+    positive_media: report.positive_media || [],
+    associations: report.associations || [],
+    sources: report.sources || [],
+    risk_drivers: report.risk_drivers || [],
+    contradictions: report.contradictions || [],
+    changes_since_last_run: report.changes_since_last_run || [],
+    executive_summary: {
+      ...report.executive_summary,
+      citations: report.executive_summary?.citations || [],
+      text: report.executive_summary?.text || "",
+      overall_risk: report.executive_summary?.overall_risk || "amber",
+    },
+    sanctions_screening: {
+      matches: report.sanctions_screening?.matches || [],
+      lists_checked: report.sanctions_screening?.lists_checked || 0,
+      status: report.sanctions_screening?.status || "clear",
+    },
+    risk_assessment: {
+      financial_crime: report.risk_assessment?.financial_crime || "green",
+      regulatory: report.risk_assessment?.regulatory || "green",
+      esg: report.risk_assessment?.esg || "green",
+      reputational: report.risk_assessment?.reputational || "green",
+      sanctions: report.risk_assessment?.sanctions || "green",
+      insolvency: report.risk_assessment?.insolvency || "green",
+    },
+    subject_profile: report.subject_profile
+      ? {
+          ...report.subject_profile,
+          headline: report.subject_profile.headline || "",
+          known_for: report.subject_profile.known_for || [],
+          locations: report.subject_profile.locations || [],
+        }
+      : undefined,
+    current_status: report.current_status
+      ? {
+          ...report.current_status,
+          source_labels: report.current_status.source_labels || [],
+        }
+      : undefined,
+    alternative_data_summary: report.alternative_data_summary
+      ? {
+          ...report.alternative_data_summary,
+          citations: report.alternative_data_summary.citations || [],
+        }
+      : undefined,
+  };
+}
+
+function normaliseStatus(status: ReportStatusResponse): ReportStatusResponse {
+  return {
+    ...status,
+    progress: status.progress || {
+      corporate_records: "pending",
+      web_search: "pending",
+      sanctions_screening: "pending",
+      analysis: "pending",
+    },
+    provider_status: status.provider_status || {},
+    debug_events: status.debug_events || [],
+    report: status.report ? normaliseReport(status.report) : undefined,
+  };
+}
+
 function isAffirmativeMessage(value: string) {
   return /^(yes|yep|yeah|confirm|continue|proceed|go ahead|yes please)$/i.test(value.trim());
 }
@@ -417,35 +487,36 @@ export function ReportErrorState({ error }: { error?: string }) {
 }
 
 export function ReportView({ report }: { report: Report }) {
-  const sourceCoverage = buildSourceCoverage(report);
-  const mediaTimeline = buildMediaTimeline(report);
-  const backgroundSources = buildBackgroundSources(report);
-  const alternativeSources = buildAlternativeSources(report);
+  const safeReport = normaliseReport(report);
+  const sourceCoverage = buildSourceCoverage(safeReport);
+  const mediaTimeline = buildMediaTimeline(safeReport);
+  const backgroundSources = buildBackgroundSources(safeReport);
+  const alternativeSources = buildAlternativeSources(safeReport);
 
   return (
     <div className="report-view">
       <div className="report-summary">
         <div>
           <p className="eyebrow">Executive Summary</p>
-          <h3>{report.subject_name}</h3>
+          <h3>{safeReport.subject_name}</h3>
           <CitedText
-            text={report.executive_summary.text}
-            citations={report.executive_summary.citations || []}
+            text={safeReport.executive_summary.text}
+            citations={safeReport.executive_summary.citations || []}
           />
         </div>
         <div className="summary-meta">
-          <span className={riskClass(report.executive_summary.overall_risk)}>
-            {riskLabel(report.executive_summary.overall_risk)}
+          <span className={riskClass(safeReport.executive_summary.overall_risk)}>
+            {riskLabel(safeReport.executive_summary.overall_risk)}
           </span>
-          <small>Generated {formatDate(report.created_at)}</small>
-          <small>{report.sources.length} sources consulted</small>
+          <small>Generated {formatDate(safeReport.created_at)}</small>
+          <small>{safeReport.sources.length} sources consulted</small>
         </div>
       </div>
 
-      {report.warnings?.length ? (
+      {safeReport.warnings?.length ? (
         <div className="warning-banner">
           <strong>Prototype caveats</strong>
-          {report.warnings.map((warning) => (
+          {safeReport.warnings.map((warning) => (
             <span key={warning}>{warning}</span>
           ))}
         </div>
@@ -453,40 +524,40 @@ export function ReportView({ report }: { report: Report }) {
 
       <div className="report-grid">
         <section className="report-section">
-          <h4>{report.subject_type === "organisation" ? "Corporate Profile" : "Subject Profile"}</h4>
-          {report.corporate_profile ? (
+          <h4>{safeReport.subject_type === "organisation" ? "Corporate Profile" : "Subject Profile"}</h4>
+          {safeReport.corporate_profile ? (
             <dl className="key-value-grid">
               <div>
                 <dt>Company number</dt>
-                <dd>{report.corporate_profile.company_number}</dd>
+                <dd>{safeReport.corporate_profile.company_number}</dd>
               </div>
               <div>
                 <dt>Status</dt>
-                <dd>{report.corporate_profile.status}</dd>
+                <dd>{safeReport.corporate_profile.status}</dd>
               </div>
               <div>
                 <dt>Type</dt>
-                <dd>{report.corporate_profile.type}</dd>
+                <dd>{safeReport.corporate_profile.type}</dd>
               </div>
               <div>
                 <dt>Registered address</dt>
-                <dd>{report.corporate_profile.registered_address}</dd>
+                <dd>{safeReport.corporate_profile.registered_address}</dd>
               </div>
               <div>
                 <dt>SIC codes</dt>
-                <dd>{report.corporate_profile.sic_codes.join(", ")}</dd>
+                <dd>{safeReport.corporate_profile.sic_codes.join(", ")}</dd>
               </div>
               <div>
                 <dt>Accounts due</dt>
-                <dd>{report.corporate_profile.accounts_due}</dd>
+                <dd>{safeReport.corporate_profile.accounts_due}</dd>
               </div>
             </dl>
           ) : (
             <div className="subject-profile">
-              <p>{report.subject_profile?.headline}</p>
+              <p>{safeReport.subject_profile?.headline}</p>
               <p>
-                Known for: {report.subject_profile?.known_for.join(", ")}. Locations:{" "}
-                {report.subject_profile?.locations.join(", ")}.
+                Known for: {safeReport.subject_profile?.known_for.join(", ") || "Not available"}. Locations:{" "}
+                {safeReport.subject_profile?.locations.join(", ") || "Not available"}.
               </p>
             </div>
           )}
@@ -495,7 +566,7 @@ export function ReportView({ report }: { report: Report }) {
         <section className="report-section">
           <h4>Directors and Officers</h4>
           <div className="stack-list">
-            {report.officers.map((officer) => (
+            {safeReport.officers.map((officer) => (
               <article
                 className="stack-card"
                 key={`${officer.name}-${officer.role}-${officer.appointed_on}-${officer.resigned_on || "active"}`}
@@ -513,9 +584,9 @@ export function ReportView({ report }: { report: Report }) {
 
         <section className="report-section">
           <h4>Ownership and Control</h4>
-          {report.pscs.length ? (
+          {safeReport.pscs.length ? (
             <div className="stack-list">
-              {report.pscs.map((psc) => (
+              {safeReport.pscs.map((psc) => (
                 <article className="stack-card" key={`${psc.name}-${psc.kind}`}>
                   <strong>{psc.name}</strong>
                   <p>{psc.kind}</p>
@@ -536,7 +607,7 @@ export function ReportView({ report }: { report: Report }) {
         <section className="report-section">
           <h4>PEP and Sanctions Screening</h4>
           <div className="stack-list">
-            {report.sanctions_screening.matches.map((match) => (
+            {safeReport.sanctions_screening.matches.map((match) => (
               <article className="stack-card" key={`${match.dataset}-${match.entity_name}`}>
                 <strong>{match.entity_name}</strong>
                 <p>{match.dataset}</p>
@@ -556,23 +627,23 @@ export function ReportView({ report }: { report: Report }) {
           </div>
         </section>
 
-        {report.current_status ? (
+        {safeReport.current_status ? (
           <section className="report-section">
             <h4>Current Status</h4>
-            <p>{report.current_status.summary}</p>
-            {report.current_status.source_labels.length ? (
+            <p>{safeReport.current_status.summary}</p>
+            {safeReport.current_status.source_labels.length ? (
               <small>
-                Based on: {report.current_status.source_labels.join(", ")}
+                Based on: {safeReport.current_status.source_labels.join(", ")}
               </small>
             ) : null}
           </section>
         ) : null}
 
-        {report.risk_drivers?.length ? (
+        {safeReport.risk_drivers?.length ? (
           <section className="report-section">
             <h4>Risk Drivers</h4>
             <div className="stack-list">
-              {report.risk_drivers.map((driver) => (
+              {safeReport.risk_drivers.map((driver) => (
                 <article className="stack-card" key={`${driver.title}-${driver.detail}`}>
                   <div className="media-header">
                     <strong>{driver.title}</strong>
@@ -627,18 +698,18 @@ export function ReportView({ report }: { report: Report }) {
 
         <section className="report-section full-span">
           <h4>Adverse Media</h4>
-          <MediaList items={report.adverse_media} />
+          <MediaList items={safeReport.adverse_media} />
         </section>
 
         <section className="report-section full-span">
           <h4>Positive Media</h4>
-          <MediaList items={report.positive_media} />
+          <MediaList items={safeReport.positive_media} />
         </section>
 
         <section className="report-section">
           <h4>Associations</h4>
           <div className="stack-list">
-            {report.associations.map((association) => (
+            {safeReport.associations.map((association) => (
               <article
                 className="stack-card"
                 key={`${association.subject}-${association.relationship}-${association.source_url}`}
@@ -665,7 +736,7 @@ export function ReportView({ report }: { report: Report }) {
         <section className="report-section">
           <h4>Risk Assessment</h4>
           <div className="risk-grid">
-            {Object.entries(report.risk_assessment).map(([category, level]) => (
+            {Object.entries(safeReport.risk_assessment).map(([category, level]) => (
               <div className="risk-row" key={category}>
                 <span>{category.replace("_", " ")}</span>
                 <strong className={riskClass(level)}>{riskLabel(level)}</strong>
@@ -674,11 +745,11 @@ export function ReportView({ report }: { report: Report }) {
           </div>
         </section>
 
-        {report.contradictions?.length ? (
+        {safeReport.contradictions?.length ? (
           <section className="report-section">
             <h4>Conflicts and Contradictions</h4>
             <div className="stack-list">
-              {report.contradictions.map((item) => (
+              {safeReport.contradictions.map((item) => (
                 <article className="stack-card" key={`${item.topic}-${item.detail}`}>
                   <strong>{item.topic}</strong>
                   <p>{item.detail}</p>
@@ -688,11 +759,11 @@ export function ReportView({ report }: { report: Report }) {
           </section>
         ) : null}
 
-        {report.changes_since_last_run?.length ? (
+        {safeReport.changes_since_last_run?.length ? (
           <section className="report-section full-span">
             <h4>What Changed Since Last Run</h4>
             <div className="stack-list">
-              {report.changes_since_last_run.map((item) => (
+              {safeReport.changes_since_last_run.map((item) => (
                 <article className="stack-card" key={item}>
                   <p>{item}</p>
                 </article>
@@ -704,7 +775,7 @@ export function ReportView({ report }: { report: Report }) {
         <section className="report-section full-span">
           <h4>Sources</h4>
           <div className="sources-list">
-            {report.sources.filter((source) => source.type !== "background" && source.type !== "alternative").map((source) => (
+            {safeReport.sources.filter((source) => source.type !== "background" && source.type !== "alternative").map((source) => (
               <a
                 href={source.url}
                 key={`${source.url}-${source.accessed_at}`}
@@ -721,12 +792,12 @@ export function ReportView({ report }: { report: Report }) {
         {alternativeSources.length ? (
           <section className="report-section full-span">
             <h4>Alternative Data</h4>
-            {report.alternative_data_summary ? (
+            {safeReport.alternative_data_summary ? (
               <div className="stack-list">
                 <article className="stack-card">
                   <CitedText
-                    text={report.alternative_data_summary.text}
-                    citations={report.alternative_data_summary.citations}
+                    text={safeReport.alternative_data_summary.text}
+                    citations={safeReport.alternative_data_summary.citations}
                   />
                 </article>
               </div>
@@ -846,7 +917,7 @@ export function ReportShell() {
             }
           : undefined,
       });
-      const data = (await response.json()) as ReportStatusResponse;
+      const data = normaliseStatus((await response.json()) as ReportStatusResponse);
       setStatus(data);
     }, 1500);
 
@@ -945,7 +1016,7 @@ export function ReportShell() {
         throw new Error(payload?.error || "Unable to send message to the diligence agent.");
       }
 
-      const data = (await response.json()) as AgentResponse;
+        const data = (await response.json()) as AgentResponse;
       setChatMessages((current) => [
         ...current,
         {
@@ -983,7 +1054,7 @@ export function ReportShell() {
       }
 
       if (data.report_status) {
-        setStatus(data.report_status);
+        setStatus(normaliseStatus(data.report_status));
         if (data.report_status.report_id) {
           setJob((current) =>
             current?.report_id === data.report_status?.report_id
